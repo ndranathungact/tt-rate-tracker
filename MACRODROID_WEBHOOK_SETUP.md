@@ -58,9 +58,12 @@ parameter becomes a key in that dictionary:
 |----------------|----------------------------------|----------------------------------|
 | `buy`          | `333.00`                         | TT buying rate (bank buys USD)   |
 | `sell`         | `341.50`                         | TT selling rate (bank sells USD) |
+| `spread`       | `8.50`                           | sell − buy (LKR)                 |
 | `currency`     | `USD`                            | Currency code                    |
 | `updated_on`   | `2026-06-25T04:35:59.000Z`       | When HNB last changed the rate   |
 | `changed`      | `true`                           | Always `true` here — the event only fires on a BUY-rate change |
+| `signal`       | `BUY` / `SELL` / `HOLD` …        | Forecast signal (only once past WARMUP) |
+| `predicted_buy`| `333.20`                         | Next-business-day forecast (only once past WARMUP) |
 | `message`      | `HNB USD TT rate — Buy 333.00 …` | Ready-made human-readable string |
 | `token`        | your shared secret (Step 6)      | Only present if you set one      |
 

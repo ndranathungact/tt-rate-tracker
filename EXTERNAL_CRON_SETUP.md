@@ -71,8 +71,11 @@ curl -i -X POST \
      ```
      https://api.github.com/repos/ndranathungact/tt-rate-tracker/actions/workflows/tt-rate.yml/dispatches
      ```
-   - **Schedule:** Every **15 minutes** (cron-job.org runs on its own reliable
-     clock, so the minute offset doesn't matter here).
+   - **Schedule:** the rate changes once per business day in the morning, so poll
+     **every 20 minutes, 03:00–13:59 UTC, Monday–Friday** (≈08:30–19:30 SL time).
+     In cron-job.org's schedule grid set: **minutes** `0,20,40`; **hours** `3–13`;
+     **days of week** `Mon–Fri`. (Use UTC — cron-job.org lets you pick the
+     timezone; pick UTC to match these numbers.) No need to poll nights/weekends.
 
    **Advanced → Request**
    - **Request method:** `POST`

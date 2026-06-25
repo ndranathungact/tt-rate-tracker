@@ -1,31 +1,25 @@
 name: TT Rate Tracker
 
-# Polls the HNB USD TT rate and pings the MacroDroid webhook when it changes.
+# Polls the HNB USD TT rate, maintains a daily series + forecast, and notifies
+# via MacroDroid push and/or HTML email when the BUY rate changes.
 #
 # Cadence note:
-#   Runs every 15 minutes at :07 :22 :37 :52. This repo is PUBLIC, so Actions
-#   minutes are unlimited and free — no monthly-minute budget to worry about.
+#   HNB sets this rate ~once per business day, in the morning (~04:00-05:00 UTC).
+#   So there is no point polling 24x7 every 15 min. This runs every 20 minutes
+#   between 03:00-13:59 UTC, Monday-Friday only (~08:30-19:30 SL time) — dense
+#   enough to catch the daily change within ~20 min, ~0 waste on nights/weekends.
 #
-#   The minutes are OFFSET (:07/:22/:37/:52) rather than :00/:15/:30/:45 on
-#   purpose: the top and bottom of the hour are the most congested slots on
-#   GitHub's shared scheduler, so runs there get delayed the most and are
-#   sometimes dropped under load. Off-boundary minutes fire more reliably.
-#
-#   GitHub's cron minimum is 5 minutes; the `schedule` event is best-effort, so
-#   expect occasional 5-30 min drift — fine here, since HNB only updates the rate
-#   a few times per banking day. A brand-new scheduled workflow also often skips
-#   its first one or two ticks before settling in (can take ~1 hour after push).
-#
-#   If you ever switch this repo back to PRIVATE, drop to "7,37 * * * *"
-#   (every 30 min ≈ 1,440 min/month) to stay under the 2,000 free min/month.
+#   The REAL schedule is driven by cron-job.org (reliable) via workflow_dispatch;
+#   see EXTERNAL_CRON_SETUP.md. This `schedule:` block is just a best-effort
+#   GitHub fallback (often delayed/dropped on low-activity repos).
 
 on:
   schedule:
-    - cron: "7,22,37,52 * * * *"
-  workflow_dispatch:        # lets you run it manually from the Actions tab
+    - cron: "*/20 3-13 * * 1-5"   # every 20 min, 03:00-13:59 UTC, Mon-Fri
+  workflow_dispatch:              # primary trigger (cron-job.org) + manual button
     inputs:
       force:
-        description: "Post to the webhook even if the rate is unchanged"
+        description: "Notify even if the rate is unchanged"
         type: boolean
         default: false
 
@@ -35,7 +29,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write           # needed to commit the updated rate state back
+  contents: write           # needed to commit the updated data series back
 
 jobs:
   poll:
@@ -44,12 +38,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch rate and post to webhook
+      - name: Fetch rate, forecast, notify
         env:
+          # --- MacroDroid channel (on; set NOTIFY_MACRODROID=false to disable) ---
+          NOTIFY_MACRODROID: "true"
           MACRODROID_WEBHOOK_URL: ${{ secrets.MACRODROID_WEBHOOK_URL }}
           WEBHOOK_SHARED_SECRET: ${{ secrets.WEBHOOK_SHARED_SECRET }}
           WEBHOOK_METHOD: GET
           ALWAYS_POST: "false"
+          # --- Email channel (flip to "true" AFTER adding the SMTP_* secrets) ---
+          NOTIFY_EMAIL: "false"
+          SMTP_HOST: smtp.gmail.com
+          SMTP_PORT: "465"
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          # --- Predictions (optional second webhook; feedback loop always runs) ---
+          PREDICTION_WEBHOOK_URL: ${{ secrets.PREDICTION_WEBHOOK_URL }}
+          PREDICTION_NOTIFY_EVERY_RUN: "false"
         run: |
           if [ "${{ inputs.force }}" = "true" ]; then
             python3 scrape.py --force
@@ -57,14 +63,16 @@ jobs:
             python3 scrape.py
           fi
 
-      - name: Commit updated rate history
+      - name: Commit updated data
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
           if git diff --cached --quiet; then
-            echo "No rate change to commit."
+            echo "Nothing changed — no commit."
           else
-            git commit -m "chore: update HNB USD TT rate [skip ci]"
+            git commit -m "chore: update HNB USD TT rate + daily series [skip ci]"
+            # Rebase on any concurrent bot push before pushing, to avoid rejects.
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
             git push
           fi
