@@ -62,6 +62,10 @@ curl -i -X POST \
 
 ## Step 3 — Create the cron-job.org job
 
+> **Can cron-job.org do our weekday/business-hours schedule? Yes.** Its free plan
+> allows unlimited jobs, **1-minute granularity**, and a **custom schedule** where
+> you pick exact minutes, hours, and weekdays — everything we need.
+
 1. Sign up (free) at **https://cron-job.org** and verify your email.
 2. **Create cronjob** and set:
 
@@ -73,9 +77,14 @@ curl -i -X POST \
      ```
    - **Schedule:** the rate changes once per business day in the morning, so poll
      **every 20 minutes, 03:00–13:59 UTC, Monday–Friday** (≈08:30–19:30 SL time).
-     In cron-job.org's schedule grid set: **minutes** `0,20,40`; **hours** `3–13`;
-     **days of week** `Mon–Fri`. (Use UTC — cron-job.org lets you pick the
-     timezone; pick UTC to match these numbers.) No need to poll nights/weekends.
+     In the schedule section choose **Custom** (a.k.a. "every selected") and tick:
+     - **Minutes:** `0`, `20`, `40`
+     - **Hours:** `3`–`13`
+     - **Days of month:** every · **Months:** every
+     - **Days of week:** `Mon`, `Tue`, `Wed`, `Thu`, `Fri`
+
+     Set the job **timezone to UTC** so those numbers line up. This is exactly the
+     cron expression `*/20 3-13 * * 1-5`. (No nights, no weekends.)
 
    **Advanced → Request**
    - **Request method:** `POST`

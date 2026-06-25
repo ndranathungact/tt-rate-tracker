@@ -1,21 +1,42 @@
-# Email Alerts via GitHub Actions (Gmail SMTP)
+# Email Alerts via GitHub Actions (SMTP)
 
-The tracker can send a **formatted HTML email** (rate card + next-day forecast)
-in addition to — or instead of — the MacroDroid push. It's sent directly from
-`scrape.py` using Python's standard-library `smtplib` (no extra dependencies, no
-third-party email service), authenticating to **Gmail SMTP** with an **App
-Password**. Free, and well under Gmail's ~500-emails/day limit (we send ~1/day).
+The tracker sends **formatted HTML emails** (rate card + next-day forecast) in
+addition to — or instead of — the MacroDroid push. It's sent directly from
+`scrape.py` using Python's standard-library `smtplib` (no extra dependencies).
 
 Both channels are independent toggles:
 
 | Toggle (workflow env) | Default | Effect |
 |---|---|---|
 | `NOTIFY_MACRODROID` | `true` | MacroDroid push on buy-change |
-| `NOTIFY_EMAIL` | `false` | HTML email on buy-change |
+| `NOTIFY_EMAIL` | `false` | HTML email (change / signal / digest) |
 
 ---
 
-## Step 1 — Create a Gmail App Password
+## Pick a provider — you do *not* need a new Google account
+
+The code is **provider-agnostic**: it just needs `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USERNAME`, `SMTP_PASSWORD`. Port `465` uses SSL; any other port (`587`,
+`2525`) uses STARTTLS — handled automatically. We send ~1 email/day, so every
+free tier below is wildly sufficient.
+
+| Provider | Free tier | SMTP host / port | New account? | Domain needed? |
+|---|---|---|---|---|
+| **Brevo** (easiest, recommended) | 300/day | `smtp-relay.brevo.com` / `587` | sign up w/ existing email | no |
+| **Mailjet** | 200/day | `in-v3.mailjet.com` / `587` | sign up | no |
+| **SMTP2GO** | 1,000/mo | `mail.smtp2go.com` / `587` | sign up | no (25/hr until verified) |
+| **Gmail** | ~500/day | `smtp.gmail.com` / `465` | use an *existing* Gmail | no |
+| **Outlook/M365** | ~limited | `smtp.office365.com` / `587` | existing account | no |
+
+**Recommendation:** if you'd rather not touch Google, use **Brevo** — sign up
+with any email, verify your sender address, create an "SMTP key", and set
+`SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, `SMTP_USERNAME`=your Brevo
+login, `SMTP_PASSWORD`=the SMTP key. Skip to Step 2. Otherwise follow Step 1 for
+Gmail (uses an *existing* account — no new one required).
+
+---
+
+## Step 1 (Gmail option) — Create a Gmail App Password
 
 A normal Google password won't work for SMTP; you need an **App Password**, which
 requires 2-Step Verification.
@@ -81,26 +102,43 @@ The first real buy-change (or a forced run) will email you.
 
 ---
 
-## What the email contains
+## The three email templates
 
-- HNB USD buy / sell, the spread, and the **day-over-day change** (▲/▼ vs the
-  previous business-day close).
-- The **next-business-day forecast**: signal (`BUY`/`SELL`/`HOLD`/`WATCH`),
-  predicted buy + uncertainty band, the chosen model, confidence, and the live
-  accuracy (rolling MAE + directional hit-rate). During early data collection it
-  shows `WARMUP`.
+All share one design (rate card + forecast block); the framing differs:
+
+| Template | When it sends | Subject example |
+|---|---|---|
+| **change** | the BUY rate moved today (or a forced run) | `HNB USD TT: Buy 334.50 (▲0.50) · BUY` |
+| **signal** | forecast turned actionable (`BUY`/`SELL`) on a *flat* day | `USD BUY signal — buy 334.50 → 335.10 (+0.60)` |
+| **digest** | opt-in once-a-day summary, even when nothing changed | `HNB USD TT daily — Buy 334.50 · HOLD` |
+
+Every email shows: buy / sell / spread, the **day-over-day change** (▲/▼ vs the
+previous close), and the **next-business-day forecast** (signal, predicted buy +
+band, model, confidence, and live accuracy — rolling MAE + hit-rate). Before
+~10 days of data it shows `WARMUP`.
+
+### Dispatch policy (no spam)
+The job runs ~33×/weekday but you get **at most one email per kind per day**,
+deduped via `data/notify_state.json`:
+- **change** fires whenever the rate actually moves.
+- **signal** / **digest** only fire **after** `EMAIL_DAILY_AFTER_UTC` (default
+  `05:30` UTC, i.e. once the morning rate has settled), once per day.
+- Turn on the daily digest with `EMAIL_DAILY_DIGEST: "true"` in the workflow.
 
 ## Troubleshooting
 
-- **`535 Username and Password not accepted`** → you used the normal password, or
-  left spaces in the app password, or 2-Step Verification isn't on.
+- **`535 Username and Password not accepted`** → wrong/again-spaced credential, or
+  (Gmail) 2-Step Verification/app-password not set, or (Brevo/Mailjet) you used
+  your login password instead of the generated **SMTP key**.
 - **Email lands in spam** → mark "not spam" / add the sender to contacts once.
 - **Run goes red on email** → a secret is missing or `NOTIFY_EMAIL=true` was set
   before the secrets existed. Check the step log for the `[error] email send` line.
+- **Wrong port** → `465` = SSL, `587`/`2525` = STARTTLS. The code auto-selects by
+  port, so just set `SMTP_PORT` to match your provider's table row above.
 
 ## Security checklist
 
-- [x] App password (not the main password), scoped to mail-send, revocable.
+- [x] App password / SMTP key (not a main password), scoped to mail-send, revocable.
 - [x] All credentials in GitHub Secrets — never committed.
-- [x] SMTP over SSL (port 465) to `smtp.gmail.com`.
-- [ ] Prefer a dedicated sender Gmail so a leak can't touch your primary account.
+- [x] SMTP over SSL (465) or STARTTLS (587) — never plaintext.
+- [ ] Prefer a dedicated sender account so a leak can't touch your primary mailbox.

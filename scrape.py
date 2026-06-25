@@ -64,6 +64,7 @@ HISTORY_FILE = os.path.join(DATA_DIR, "history.jsonl")
 DAILY_FILE = os.path.join(DATA_DIR, "daily.csv")
 PREDICTIONS_FILE = os.path.join(DATA_DIR, "predictions.jsonl")
 METRICS_FILE = os.path.join(DATA_DIR, "prediction_metrics.json")
+NOTIFY_STATE_FILE = os.path.join(DATA_DIR, "notify_state.json")
 
 CURRENCY_CODE = os.environ.get("CURRENCY_CODE", "USD").upper()
 USER_AGENT = "tt-rate-tracker/2.0 (+https://github.com/)"
@@ -603,11 +604,18 @@ def post_prediction_webhook(record: dict, cfg: dict) -> bool:
 
 _SIGNAL_COLOR = {"BUY": "#15803d", "SELL": "#b91c1c", "HOLD": "#475569",
                  "WATCH": "#b45309", "WARMUP": "#64748b"}
+# kind -> (header subtitle, header background colour)
+_KIND_META = {
+    "change": ("Rate changed", "#0f172a"),
+    "signal": ("Forecast signal", "#1e3a8a"),
+    "digest": ("Daily summary", "#334155"),
+}
 
 
-def build_email(record: dict, prediction: dict | None,
-                prev_close: float | None) -> tuple[str, str, str]:
-    """Return (subject, html_body, text_body)."""
+def build_email(record: dict, prediction: dict | None, prev_close: float | None,
+                kind: str = "change") -> tuple[str, str, str]:
+    """Return (subject, html_body, text_body) for the given email kind:
+    'change' (rate moved), 'signal' (actionable BUY/SELL), or 'digest' (daily)."""
     buy, sell, spread = record["tt_buy"], record["tt_sell"], record["spread"]
     cur = record["currency"]
     day_delta = (buy - prev_close) if prev_close is not None else None
@@ -617,7 +625,27 @@ def build_email(record: dict, prediction: dict | None,
 
     sig = (prediction or {}).get("signal", "WARMUP")
     scolor = _SIGNAL_COLOR.get(sig, "#64748b")
-    subject = f"HNB {cur} TT: Buy {buy:.2f}" + (f" ({arrow}{abs(day_delta):.2f})" if day_delta else "") + f" · {sig}"
+    subtitle, accent = _KIND_META.get(kind, _KIND_META["change"])
+    actionable = prediction and prediction.get("model") != "warmup"
+    if kind == "signal" and actionable:
+        subject = (f"USD {sig} signal — buy {buy:.2f} → "
+                   f"{prediction['predicted_buy']:.2f} ({prediction['delta']:+.2f})")
+    elif kind == "digest":
+        subject = f"HNB {cur} TT daily — Buy {buy:.2f} · {sig}"
+    else:
+        subject = (f"HNB {cur} TT: Buy {buy:.2f}"
+                   + (f" ({arrow}{abs(day_delta):.2f})" if day_delta else "") + f" · {sig}")
+
+    banner_html = ""
+    if kind == "signal" and actionable:
+        verb = {"BUY": "Buy USD soon", "SELL": "Hold off / sell"}.get(sig, sig)
+        banner_html = f"""
+    <tr><td style="padding:20px 20px 0;">
+      <div style="background:{scolor};color:#fff;border-radius:10px;padding:14px 16px;">
+        <div style="font-size:22px;font-weight:800;">{sig} · {verb}</div>
+        <div style="font-size:13px;opacity:.92;margin-top:2px;">next day {prediction['predicted_buy']:.2f} ({prediction['delta']:+.2f} LKR) · confidence {prediction['confidence']}</div>
+      </div>
+    </td></tr>"""
 
     pred_html = ""
     if prediction and prediction.get("model") != "warmup":
@@ -646,10 +674,11 @@ def build_email(record: dict, prediction: dict | None,
 <div style="background:#f1f5f9;padding:24px 0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
   <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">
-    <tr><td style="background:#0f172a;padding:18px 20px;color:#fff;">
+    <tr><td style="background:{accent};padding:18px 20px;color:#fff;">
       <div style="font-size:18px;font-weight:700;">🇱🇰 HNB {cur} → LKR · TT Rate</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:2px;">{sl_date(now_utc()).strftime('%A, %d %b %Y')}</div>
+      <div style="font-size:12px;color:#cbd5e1;margin-top:2px;">{subtitle} · {sl_date(now_utc()).strftime('%A, %d %b %Y')}</div>
     </td></tr>
+    {banner_html}
     <tr><td style="padding:20px;">
       <table role="presentation" width="100%"><tr>
         <td style="width:50%;">
@@ -672,7 +701,7 @@ def build_email(record: dict, prediction: dict | None,
   </td></tr></table>
 </div>"""
 
-    text_lines = [record["message"], f"spread {spread:.2f} LKR"]
+    text_lines = [f"[{kind.upper()}] {record['message']}", f"spread {spread:.2f} LKR"]
     if dtxt:
         text_lines.append(dtxt)
     if prediction and prediction.get("model") != "warmup":
@@ -700,21 +729,97 @@ def send_email(subject: str, html: str, text: str) -> bool:
     msg["To"] = to
     msg.attach(MIMEText(text, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
+    recipients = [a.strip() for a in to.split(",") if a.strip()]
     try:
         ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=HTTP_TIMEOUT) as s:
-            s.login(user, pw)
-            s.sendmail(frm, [addr.strip() for addr in to.split(",")], msg.as_string())
-        print(f"[ok] email sent to {to}")
+        if port == 465:  # implicit TLS (Gmail)
+            with smtplib.SMTP_SSL(host, port, context=ctx, timeout=HTTP_TIMEOUT) as s:
+                s.login(user, pw)
+                s.sendmail(frm, recipients, msg.as_string())
+        else:            # STARTTLS (587/2525/25) — Brevo, Mailjet, SMTP2GO, …
+            with smtplib.SMTP(host, port, timeout=HTTP_TIMEOUT) as s:
+                s.ehlo(); s.starttls(context=ctx); s.ehlo()
+                s.login(user, pw)
+                s.sendmail(frm, recipients, msg.as_string())
+        print(f"[ok] email sent to {len(recipients)} recipient(s) via {host}:{port}")
         return True
     except (smtplib.SMTPException, OSError) as err:
         print(f"[error] email send failed: {err}", file=sys.stderr)
         return False
 
 
-def notify_email(record: dict, prediction: dict | None, prev_close: float | None) -> bool:
-    subject, html, text = build_email(record, prediction, prev_close)
+def notify_email(kind: str, record: dict, prediction: dict | None,
+                 prev_close: float | None) -> bool:
+    subject, html, text = build_email(record, prediction, prev_close, kind)
     return send_email(subject, html, text)
+
+
+# --- Email dispatch policy ---------------------------------------------------
+# 33 runs/day must not become 33 emails. We send at most ONE email per run,
+# deduped per SL day via data/notify_state.json:
+#   change : the BUY rate moved today (or --force) — any time
+#   signal : forecast turned actionable (BUY/SELL), once per distinct signal/day,
+#            only after the morning "settle" time so it reflects today's rate
+#   digest : opt-in (EMAIL_DAILY_DIGEST=true) once/day after the settle time
+
+def _notify_state() -> dict:
+    try:
+        with open(NOTIFY_STATE_FILE, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def _save_notify_state(state: dict) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(NOTIFY_STATE_FILE, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, indent=2)
+        fh.write("\n")
+
+
+def _settle_time() -> dt.time:
+    raw = os.environ.get("EMAIL_DAILY_AFTER_UTC", "05:30").strip()
+    try:
+        h, m = raw.split(":")
+        return dt.time(int(h), int(m), tzinfo=dt.timezone.utc)
+    except (ValueError, AttributeError):
+        return dt.time(5, 30, tzinfo=dt.timezone.utc)
+
+
+def select_email_kind(changed: bool, prediction: dict | None,
+                      when_utc: dt.datetime, forced: bool) -> str | None:
+    """Pick at most one email kind for this run (pure; reads state, no writes)."""
+    today = sl_date(when_utc).isoformat()
+    st = _notify_state()
+    fresh = st.get("date") != today
+    sig = (prediction or {}).get("signal")
+    actionable = sig in ("BUY", "SELL")
+    after_settle = when_utc.timetz() >= _settle_time()
+
+    if (changed or forced) and not (not fresh and st.get("change")):
+        return "change"
+    if actionable and after_settle and (fresh or st.get("signal_sent") != sig):
+        return "signal"
+    if (_env_bool("EMAIL_DAILY_DIGEST", False) and after_settle
+            and not (not fresh and st.get("digest"))):
+        return "digest"
+    return None
+
+
+def mark_email_sent(kind: str, prediction: dict | None, when_utc: dt.datetime) -> None:
+    today = sl_date(when_utc).isoformat()
+    st = _notify_state()
+    if st.get("date") != today:
+        st = {"date": today}
+    sig = (prediction or {}).get("signal")
+    if kind == "change":
+        st["change"] = True
+        st["signal_sent"] = sig          # the change email already shows the signal
+    elif kind == "signal":
+        st["signal_sent"] = sig
+    elif kind == "digest":
+        st["digest"] = True
+    _save_notify_state(st)
 
 
 # --- Main --------------------------------------------------------------------
@@ -757,10 +862,10 @@ def main() -> int:
     # Email test path (setup verification).
     if args.email_test:
         if args.dry_run:
-            subj, html, _ = build_email(record, prediction, prev_close)
-            print(f"[dry-run][email-test] subject: {subj}\n{html[:200]}...")
+            subj, html, _ = build_email(record, prediction, prev_close, "change")
+            print(f"[dry-run][email-test] subject: {subj}  (html {len(html)} bytes, not sent)")
         else:
-            notify_email(record, prediction, prev_close)
+            notify_email("change", record, prediction, prev_close)
 
     if args.dry_run:
         print("[dry-run] not posting, not writing state.")
@@ -770,19 +875,27 @@ def main() -> int:
         return 0
 
     always = _env_bool("ALWAYS_POST", False)
-    should_notify = changed or always or args.force
-    if not should_notify:
-        print("[info] rate unchanged — nothing to notify.")
-        return 0
-
-    # Notify each enabled channel; surface a failure as a red run.
+    should_push = changed or always or args.force
     failures = []
-    if _env_bool("NOTIFY_MACRODROID", True):
+
+    # MacroDroid push — instant alert on a rate change.
+    if should_push and _env_bool("NOTIFY_MACRODROID", True):
         if not notify_macrodroid(record, prediction) and os.environ.get("MACRODROID_WEBHOOK_URL"):
             failures.append("macrodroid")
+
+    # Email — its own policy (change / signal / digest), deduped per SL day, so
+    # it can fire on a flat day (e.g. an actionable forecast) without spamming.
     if _env_bool("NOTIFY_EMAIL", False):
-        if not notify_email(record, prediction, prev_close):
-            failures.append("email")
+        kind = select_email_kind(changed, prediction, when, args.force)
+        if kind:
+            if notify_email(kind, record, prediction, prev_close):
+                mark_email_sent(kind, prediction, when)
+            else:
+                failures.append("email")
+        else:
+            print("[info] no email to send this run.")
+    elif not should_push:
+        print("[info] rate unchanged — nothing to notify.")
 
     return 1 if failures else 0
 

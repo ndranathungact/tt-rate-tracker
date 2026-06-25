@@ -88,9 +88,11 @@ No third-party Python packages required (standard library only).
 | `WEBHOOK_METHOD` | `GET` | `GET` (query params) or `POST` (JSON body). |
 | `WEBHOOK_SHARED_SECRET` | – | Optional token appended as `?token=…` for the macro to verify. |
 | `NOTIFY_EMAIL` | `false` | Master toggle for the HTML email channel. |
-| `SMTP_USERNAME` / `SMTP_PASSWORD` | – | Gmail address + **app password** (secrets). See [EMAIL_SETUP.md](EMAIL_SETUP.md). |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | – | SMTP login + **app password / SMTP key** (secrets). Any provider — see [EMAIL_SETUP.md](EMAIL_SETUP.md). |
 | `EMAIL_TO` | – | Recipient(s), comma-separated (secret). |
-| `SMTP_HOST` / `SMTP_PORT` | `smtp.gmail.com` / `465` | SMTP server (override for non-Gmail). |
+| `SMTP_HOST` / `SMTP_PORT` | `smtp.gmail.com` / `465` | SMTP server. `465`=SSL, `587`=STARTTLS (auto). Gmail/Brevo/Mailjet/SMTP2GO all work. |
+| `EMAIL_DAILY_DIGEST` | `false` | `true` = one summary email/day, even on flat days. |
+| `EMAIL_DAILY_AFTER_UTC` | `05:30` | Only send signal/digest emails after this UTC time. |
 | `ALWAYS_POST` | `false` | `true` = notify every run, not just on change. |
 | `CURRENCY_CODE` | `USD` | Track a different currency if you want. |
 
@@ -130,6 +132,7 @@ drift guard), `WARMUP` (not enough data yet).
 - `data/predictions.jsonl` — one forecast per business day, reconciled against the
   realised next-day close (the feedback-loop train/eval log).
 - `data/prediction_metrics.json` — rolling MAE, naive MAE, directional hit-rate.
+- `data/notify_state.json` — per-day email dedup (so 33 runs/day ≠ 33 emails).
 
 > **Honest expectation:** this rate is *administratively set* (HNB tracks the
 > interbank USD/LKR + a margin), so day-to-day it's sticky and the naive baseline

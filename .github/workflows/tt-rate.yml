@@ -47,12 +47,16 @@ jobs:
           WEBHOOK_METHOD: GET
           ALWAYS_POST: "false"
           # --- Email channel (flip to "true" AFTER adding the SMTP_* secrets) ---
+          # Works with ANY SMTP provider — Gmail (465), or Brevo/Mailjet/SMTP2GO
+          # (587). Just set SMTP_HOST/SMTP_PORT to match. See EMAIL_SETUP.md.
           NOTIFY_EMAIL: "false"
           SMTP_HOST: smtp.gmail.com
           SMTP_PORT: "465"
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_DAILY_DIGEST: "false"     # "true" = one summary email/day, even on flat days
+          EMAIL_DAILY_AFTER_UTC: "05:30"   # only send signal/digest after the morning update settles
           # --- Predictions (optional second webhook; feedback loop always runs) ---
           PREDICTION_WEBHOOK_URL: ${{ secrets.PREDICTION_WEBHOOK_URL }}
           PREDICTION_NOTIFY_EVERY_RUN: "false"
