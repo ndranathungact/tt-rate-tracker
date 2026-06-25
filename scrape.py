@@ -12,9 +12,10 @@ table. It returns clean JSON including an `updated_on` timestamp.
 Behaviour:
     * Fetch the latest USD buying/selling rate.
     * Compare against the last value we recorded (data/latest.json).
-    * If it changed (or on the very first run), POST it to the MacroDroid webhook
-      and append a row to data/history.jsonl (handy for future predictions).
-    * If nothing changed, do nothing (so you are not spammed on every poll).
+    * If the BUY rate changed (or on the very first run), POST it to the
+      MacroDroid webhook and append a row to data/history.jsonl. The sell price
+      is included in the notification, but a sell-only move does NOT trigger.
+    * Otherwise do nothing (so you are not spammed on every poll).
 
 Environment variables:
     MACRODROID_WEBHOOK_URL   (required to actually post) e.g.
@@ -126,12 +127,14 @@ def save_state(record: dict) -> None:
 
 
 def has_changed(latest: dict | None, current: dict) -> bool:
+    # We trigger ONLY on a change in the BUY rate. A sell-only move does not fire
+    # an event. The sell price is still shown in the notification regardless,
+    # because build_record() always uses the freshly-fetched live rate.
     # `latest` is a previously-saved record (tt_buy/tt_sell keys); `current` is a
     # freshly-fetched rate dict (buy/sell keys).
     if latest is None:
         return True
-    return (latest.get("tt_buy") != current["buy"]
-            or latest.get("tt_sell") != current["sell"])
+    return latest.get("tt_buy") != current["buy"]
 
 
 # --- Webhook -----------------------------------------------------------------

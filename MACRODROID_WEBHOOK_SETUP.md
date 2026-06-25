@@ -21,21 +21,29 @@ and you get a notification. It also covers how to keep the webhook **secure**.
 
 1. Tap **Add Macro** (the **+** button).
 2. **Trigger** → tap **+** → **Connectivity** → **Webhook (Url)**.
-3. MacroDroid generates a URL that looks like this:
+3. The trigger configuration screen appears. Fill it in like this:
+
+   | Field on screen | What to enter | Why |
+   |---|---|---|
+   | **Identifier** | A non-obvious event name, e.g. `usd_rate_a7f3` | Becomes the last part of your URL. Avoid guessable names like `usd`. |
+   | **Save body to string variable** | **Leave OFF / skip** | The body is only used for `POST` JSON. This project sends data in the URL (a `GET`), so there is no body to read. |
+   | **Save query parameters to dictionary** | **Turn ON**, create a dictionary named **`rate`** | This is where the rate values land — see the table below. |
+   | **Save headers to dictionary** (if shown) | Skip | Not needed. |
+
+4. Your full webhook URL is now:
 
    ```
-   https://trigger.macrodroid.com/<your-device-id>/<event-name>
+   https://trigger.macrodroid.com/<your-device-id>/usd_rate_a7f3
    ```
 
    - `<your-device-id>` is a long UUID unique to your phone — **this is the secret part**.
-   - `<event-name>` is a label you choose. Type something non-obvious, e.g.
-     `usd_rate_a7f3` rather than just `usd`. (A guessable event name plus a
-     leaked device id is what an attacker would need.)
-4. **Copy the full URL** — you'll paste it into GitHub in Step 5. Tap **OK**.
+   - A guessable identifier plus a leaked device id is what an attacker would need,
+     so keep both private.
+5. **Copy the full URL** — you'll paste it into GitHub in Step 5. Save the trigger.
 
 ---
 
-## 3. Read the incoming values (magic variables)
+## 3. The values you receive (the `rate` dictionary)
 
 GitHub sends the rate as query parameters on the URL, for example:
 
@@ -43,24 +51,23 @@ GitHub sends the rate as query parameters on the URL, for example:
 .../usd_rate_a7f3?buy=333.00&sell=341.50&currency=USD&updated_on=...&changed=true&message=HNB%20USD%20TT%20rate%20...
 ```
 
-MacroDroid exposes each query parameter as a **magic variable** named after the
-key. To use them:
+Because you ticked **Save query parameters to dictionary** (named `rate`), each
+parameter becomes a key in that dictionary:
 
-- Wherever you can type text in an action, tap the **{x}** / magic-text button
-  and you can insert webhook variables.
-- The values arriving from this project are:
-  | Variable     | Example                         | Meaning                          |
-  |--------------|---------------------------------|----------------------------------|
-  | `buy`        | `333.00`                        | TT buying rate (bank buys USD)   |
-  | `sell`       | `341.50`                        | TT selling rate (bank sells USD) |
-  | `currency`   | `USD`                           | Currency code                    |
-  | `updated_on` | `2026-06-25T04:35:59.000Z`      | When HNB last changed the rate   |
-  | `changed`    | `true`                          | Whether the rate changed         |
-  | `message`    | `HNB USD TT rate — Buy 333.00 …`| Ready-made human-readable string |
+| Dictionary key | Example                          | Meaning                          |
+|----------------|----------------------------------|----------------------------------|
+| `buy`          | `333.00`                         | TT buying rate (bank buys USD)   |
+| `sell`         | `341.50`                         | TT selling rate (bank sells USD) |
+| `currency`     | `USD`                            | Currency code                    |
+| `updated_on`   | `2026-06-25T04:35:59.000Z`       | When HNB last changed the rate   |
+| `changed`      | `true`                           | Always `true` here — the event only fires on a BUY-rate change |
+| `message`      | `HNB USD TT rate — Buy 333.00 …` | Ready-made human-readable string |
+| `token`        | your shared secret (Step 6)      | Only present if you set one      |
 
-> Tip: To reference one in an action, MacroDroid uses the form
-> `[webhook_variable=buy]`. The easiest path is the **{x}** magic-text picker,
-> which lists detected webhook variables for you.
+To reference a key, tap the magic-text **`{x}`** button in any text field, pick
+the **`rate`** dictionary, then choose the key. It inserts a token that looks
+like `[v=rate[buy]]`. **Always use the picker** rather than hand-typing brackets —
+it guarantees the right syntax for your MacroDroid version.
 
 ---
 
@@ -69,15 +76,17 @@ key. To use them:
 1. Still editing the macro → **Actions** → **+** → **Notification** →
    **Display Notification**.
 2. **Title:** `HNB USD TT Rate`
-3. **Text:** insert the magic variable `message` (via the **{x}** button), or
-   build your own, e.g.:
+3. **Text:** tap **`{x}`** → pick dictionary **`rate`** → key **`message`**
+   (inserts `[v=rate[message]]`). That alone reads:
+   *"HNB USD TT rate — Buy 333.00 / Sell 341.50 LKR"*.
+   Prefer your own layout? Use:
 
    ```
-   Buy [webhook_variable=buy] / Sell [webhook_variable=sell] LKR
+   Buy [v=rate[buy]] / Sell [v=rate[sell]] LKR
    ```
 4. (Optional) Add a second action like **Text-to-Speech** or **Vibrate** if you
    want it to be loud.
-5. Leave **Constraints** empty (we want it to fire every time).
+5. Leave **Constraints** empty for now (Step 6 adds an optional security one).
 6. Tap the **✓** to save. Give the macro a name like **HNB USD TT Alert**.
 
 ---
@@ -105,7 +114,8 @@ factor so a leaked URL alone isn't enough:
    The script will then append `&token=kP9w2Lz8Qy` to every call.
 3. In MacroDroid, on the macro, add a **Constraint**:
    **Constraints** → **+** → **MacroDroid Specific** → **Magic Text / Variable
-   comparison** → compare `[webhook_variable=token]` **equals** `kP9w2Lz8Qy`.
+   comparison** → compare `[v=rate[token]]` **equals** `kP9w2Lz8Qy`
+   (insert the left side via the `{x}` picker: dictionary `rate`, key `token`).
 4. Now the macro only runs when the token matches. Drop the URL alone and
    nothing fires.
 

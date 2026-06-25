@@ -3,15 +3,25 @@ name: TT Rate Tracker
 # Polls the HNB USD TT rate and pings the MacroDroid webhook when it changes.
 #
 # Cadence note:
-#   */15 = every 15 minutes. On a PUBLIC repo, Actions minutes are unlimited
-#   and free, so this costs nothing. If you make the repo PRIVATE, change this
-#   to "*/30 * * * *" (every 30 min) to stay under the 2,000 free min/month.
-#   GitHub's cron minimum is 5 minutes, and runs may be delayed 5-30 min at
-#   peak times — fine here, since HNB only updates the rate a few times a day.
+#   Runs every 15 minutes at :07 :22 :37 :52. This repo is PUBLIC, so Actions
+#   minutes are unlimited and free — no monthly-minute budget to worry about.
+#
+#   The minutes are OFFSET (:07/:22/:37/:52) rather than :00/:15/:30/:45 on
+#   purpose: the top and bottom of the hour are the most congested slots on
+#   GitHub's shared scheduler, so runs there get delayed the most and are
+#   sometimes dropped under load. Off-boundary minutes fire more reliably.
+#
+#   GitHub's cron minimum is 5 minutes; the `schedule` event is best-effort, so
+#   expect occasional 5-30 min drift — fine here, since HNB only updates the rate
+#   a few times per banking day. A brand-new scheduled workflow also often skips
+#   its first one or two ticks before settling in (can take ~1 hour after push).
+#
+#   If you ever switch this repo back to PRIVATE, drop to "7,37 * * * *"
+#   (every 30 min ≈ 1,440 min/month) to stay under the 2,000 free min/month.
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:        # lets you run it manually from the Actions tab
     inputs:
       force:
