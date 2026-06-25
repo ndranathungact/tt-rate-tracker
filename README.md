@@ -55,12 +55,16 @@ Example response (trimmed):
   The commit-on-change keeps the repo active in practice; if rates somehow don't
   move for 60 days, re-enable it from the Actions tab.
 
-### Free alternatives (if you ever outgrow GitHub Actions)
-- **cron-job.org** — free, triggers any URL on a schedule (down to 1 min).
+### ⚠️ GitHub's `schedule` is unreliable — use cron-job.org for punctual runs
+GitHub's built-in cron is best-effort: on new/low-activity repos the first runs
+are delayed by hours or dropped entirely. **For reliable triggering, a free
+external scheduler (cron-job.org) pokes the workflow via the GitHub API** — see
+**[EXTERNAL_CRON_SETUP.md](EXTERNAL_CRON_SETUP.md)**. The `schedule:` block then
+acts as a harmless fallback (or you can remove it).
+
+### Other free schedulers (alternatives to cron-job.org)
 - **Cloudflare Workers Cron Triggers** — free tier, can run the fetch + POST.
 - **Deno Deploy / Val Town** — free scheduled functions.
-
-All are free; none are needed for the current design.
 
 ## Setup
 
