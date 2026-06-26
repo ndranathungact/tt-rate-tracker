@@ -41,7 +41,7 @@ jobs:
       - name: Fetch rate, forecast, notify
         env:
           # --- MacroDroid channel (on; set NOTIFY_MACRODROID=false to disable) ---
-          NOTIFY_MACRODROID: "true"
+          NOTIFY_MACRODROID: "false"
           MACRODROID_WEBHOOK_URL: ${{ secrets.MACRODROID_WEBHOOK_URL }}
           WEBHOOK_SHARED_SECRET: ${{ secrets.WEBHOOK_SHARED_SECRET }}
           WEBHOOK_METHOD: GET
@@ -49,7 +49,7 @@ jobs:
           # --- Email channel (flip to "true" AFTER adding the SMTP_* secrets) ---
           # Works with ANY SMTP provider — Gmail (465), or Brevo/Mailjet/SMTP2GO
           # (587). Just set SMTP_HOST/SMTP_PORT to match. See EMAIL_SETUP.md.
-          NOTIFY_EMAIL: "false"          # flip to "true" once the 3 SMTP secrets exist
+          NOTIFY_EMAIL: "true"          # flip to "true" once the 3 SMTP secrets exist
           SMTP_HOST: smtp.gmail.com
           SMTP_PORT: "465"
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
