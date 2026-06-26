@@ -49,9 +49,9 @@ jobs:
           # --- Email channel (flip to "true" AFTER adding the SMTP_* secrets) ---
           # Works with ANY SMTP provider — Gmail (465), or Brevo/Mailjet/SMTP2GO
           # (587). Just set SMTP_HOST/SMTP_PORT to match. See EMAIL_SETUP.md.
-          NOTIFY_EMAIL: "false"
-          SMTP_HOST: smtp.gmail.com
-          SMTP_PORT: "465"
+          NOTIFY_EMAIL: "false"          # flip to "true" once the 3 SMTP secrets exist
+          SMTP_HOST: smtp-relay.brevo.com
+          SMTP_PORT: "587"
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
