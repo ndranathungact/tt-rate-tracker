@@ -1,7 +1,7 @@
 {
-  "resolved": 20,
-  "window": 20,
-  "mae": 0.1325,
-  "naive_mae": 0.1325,
+  "resolved": 21,
+  "window": 21,
+  "mae": 0.1262,
+  "naive_mae": 0.1262,
   "directional_hit_rate": null
 }
