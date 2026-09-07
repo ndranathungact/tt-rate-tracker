@@ -1,11 +1,11 @@
 {
   "bank": "HNB",
   "currency": "USD",
-  "tt_buy": 325.0,
-  "tt_sell": 332.25,
+  "tt_buy": 324.75,
+  "tt_sell": 332.0,
   "spread": 7.25,
-  "updated_on": "2026-09-03T03:53:34.000Z",
-  "fetched_at": "2026-09-03T04:30:18+00:00",
+  "updated_on": "2026-09-07T04:08:40.000Z",
+  "fetched_at": "2026-09-07T04:30:16+00:00",
   "changed": true,
-  "message": "HNB USD TT rate \u2014 Buy 325.00 / Sell 332.25 LKR"
+  "message": "HNB USD TT rate \u2014 Buy 324.75 / Sell 332.00 LKR"
 }
